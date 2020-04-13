@@ -19,11 +19,10 @@ library(pROC)
 library(AppliedPredictiveModeling)
 library(ISLR)
 library(tidyverse)
-library(sqldf)
 ```
 
 
-# 1. Produce graphical summaries of the Weekly data
+# PART A: Produce graphical summaries of the Weekly data
 ```{r}
 data("Weekly")
 
@@ -34,9 +33,11 @@ ggplot(Weekly, aes(x = Year, y = Volume, group = Year)) + geom_boxplot() + labs(
            x = "Year",
            y = "Volume")
 ```
+In the plot above, we can see that the total volume increases across years and was highest in 2009. 
 
+# DENSITY PLOTS FOR PREDICTORS
 ```{r}
-theme1 <- transparentTheme(trans = .4) #creates the themes for the feature plots 
+theme1 <- transparentTheme(trans = .4) 
 theme1$strip.background$col <- rgb(.0, .6, .2, .2) 
 trellis.par.set(theme1)
 
@@ -50,7 +51,7 @@ featurePlot(x = Weekly[, 1:7],
 Density plots are graphically presented above for seven predictor variables in the dataset (lag1, lag2, lag3, lag4, lag5, volume, year).
 
 
-
+# PART B: Use full data set to perform a logistic regression with Direction as the response and the five LAg variables plus Volume as predictors. 
 ```{r}
 glm.fit <- glm(Direction~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume, 
                data = Weekly,
@@ -63,22 +64,32 @@ summary(glm.fit)
 ```
 
 At alpha level of 0.05, only the variable "lag2" appears to be statistically significant in the logistic regression model (p-value = 0.0296). All other predictor variables have p-values greater than 0.05. 
+
+# PART C: Compute the confusion matrix and overall fraction of correct predictions. Breifly explain what the confusion matrix is telling you. 
 ```{r}
 glm.probs=predict(glm.fit, type = "response")
 glm.probs[1:10]
 contrasts(Weekly$Direction)
 glm.pred=rep("Down", 1089)
 glm.pred[glm.probs>.5]="Up"
-table(glm.pred, Weekly$Direction)
 
+#creating confusion matrix table
+table(glm.pred, Weekly$Direction)
 (557+54)/1089
 # 0.5610652
 
 mean(glm.pred == Weekly$Direction)
 
+#using confusion matrix function
+confusionMatrix(data = as.factor(glm.pred),
+                reference = Weekly$Direction,
+                positive = "Up")
 ```
+The confusion matrix can be used to determine how many observations were correctly or incorrectly classified. The diagonal elments of the confusion matrix indicate correct predictions. From the output above, the accurcacy (number of cells with correct classification) was 56.11%. This value was calculated in the following way: (557 + 54)/1089 = 0.5611. 
 
-# Part D
+The PPV value is 0.5643. Thus, of the total number of market UP predictions, only 56.43% were truly "UP". The NPV value is 0.5294. Of the total number of market DOWN predictions, only 52.94% of of those were truly "DOWN."
+
+# Part D: Plot the ROC curve using the predicted probability from logistic regresion and report the AUC. 
 ```{r}
 roc.glm <- roc(Weekly$Direction, glm.probs)
 
@@ -87,7 +98,8 @@ plot(smooth(roc.glm), col = 4, add = TRUE)
 ```
 The AUC value is 0.554.
 
-# PART E
+# PART E: Now fit the logistic regression model using a training data period from 1990 to 2008, with Lag1 and Lag2 as the predictors. Plot the ROC curve using the held out data (that is, the data from 2009 and 2010) and report the AUC.
+
 ```{r}
 train = (Weekly$Year < 2009)
 Weekly.2009=Weekly[!train,]
@@ -122,9 +134,9 @@ roc.glm2 <- roc(Weekly.2009$Direction, glm.probs2)
 plot(roc.glm2, legacy.axes = TRUE, print.auc = TRUE)
 plot(smooth(roc.glm2), col = 4, add = TRUE) 
 ```
-The AUC value is 0.556.
+The ROC curve using the held out data (that is, the data from 2009 and 2010) is presented above. The AUC value is 0.556.
 
-#LDA
+# PART F: LDA
 ```{r}
 lda.fit = lda(Direction ~ Lag1 + Lag2, data = Weekly, subset = train)
 
@@ -140,9 +152,9 @@ roc.lda <- roc(Weekly.2009$Direction, lda.pred$posterior[,2],
 
 plot(roc.lda, legacy.axes = TRUE, print.auc = TRUE)
 ```
-The AUC value is 0.557
+The AUC value for the LDA model is 0.557
 
-# QDA
+# PART F: QDA
 ```{r}
 qda.fit <- qda(Direction ~ Lag1 + Lag2, 
                data = Weekly,
@@ -151,14 +163,15 @@ qda.fit <- qda(Direction ~ Lag1 + Lag2,
 qda.pred <- predict(qda.fit, newdata = Weekly.2009)
 head(qda.pred$posterior)
 
-roc.lda <- roc(Weekly.2009$Direction, qda.pred$posterior[,2], 
+roc.qda <- roc(Weekly.2009$Direction, qda.pred$posterior[,2], 
                levels = c("Down", "Up"))
 
 plot(roc.lda, legacy.axes = TRUE, print.auc = TRUE)
 
 ```
-The AUC value is 0.529. 
+The AUC value for the QDA model is 0.529. 
 
+# PART G: KNN 
 ```{r}
 
 ctrl <- trainControl(method = "repeatedcv",
@@ -174,8 +187,8 @@ model.knn <- train(Direction ~ Lag1 + Lag2,
                    tuneGrid = data.frame(k = seq(1,200,by=5)),
                    trControl = ctrl)
 
-ggplot(model.knn)
-
+#ROC using repreated cross-validation 
+ggplot(model.knn, print.auc = TRUE)
 ``` 
 
 
