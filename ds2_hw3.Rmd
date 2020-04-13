@@ -1,0 +1,185 @@
+---
+title: "Data Science 2 HW 3"
+author: "Amanda Howarth"
+date: "4/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo = T, message = FALSE, results='hide', warning=FALSE}
+library(caret)
+library(glmnet)
+library(dplyr)
+library(MASS) 
+library(e1071)
+library(pROC) 
+library(AppliedPredictiveModeling)
+library(ISLR)
+library(tidyverse)
+library(sqldf)
+```
+
+
+# 1. Produce graphical summaries of the Weekly data
+```{r}
+data("Weekly")
+
+#Summary of Weekly data
+summary(Weekly)
+
+ggplot(Weekly, aes(x = Year, y = Volume, group = Year)) + geom_boxplot() + labs(title = "Total Volume Across Years, 1990 - 2010",
+           x = "Year",
+           y = "Volume")
+```
+
+```{r}
+theme1 <- transparentTheme(trans = .4) #creates the themes for the feature plots 
+theme1$strip.background$col <- rgb(.0, .6, .2, .2) 
+trellis.par.set(theme1)
+
+featurePlot(x = Weekly[, 1:7], 
+            y = Weekly$Direction,
+            scales = list(x=list(relation="free"), 
+                          y=list(relation="free")),
+            plot = "density", pch = "|", 
+            auto.key = list(columns = 2))
+```
+Density plots are graphically presented above for seven predictor variables in the dataset (lag1, lag2, lag3, lag4, lag5, volume, year).
+
+
+
+```{r}
+glm.fit <- glm(Direction~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume, 
+               data = Weekly,
+               family = binomial)
+
+contrasts(Weekly$Direction)
+#UP = 1; DOWN = 0
+
+summary(glm.fit)
+```
+
+At alpha level of 0.05, only the variable "lag2" appears to be statistically significant in the logistic regression model (p-value = 0.0296). All other predictor variables have p-values greater than 0.05. 
+```{r}
+glm.probs=predict(glm.fit, type = "response")
+glm.probs[1:10]
+contrasts(Weekly$Direction)
+glm.pred=rep("Down", 1089)
+glm.pred[glm.probs>.5]="Up"
+table(glm.pred, Weekly$Direction)
+
+(557+54)/1089
+# 0.5610652
+
+mean(glm.pred == Weekly$Direction)
+
+```
+
+# Part D
+```{r}
+roc.glm <- roc(Weekly$Direction, glm.probs)
+
+plot(roc.glm, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.glm), col = 4, add = TRUE) 
+```
+The AUC value is 0.554.
+
+# PART E
+```{r}
+train = (Weekly$Year < 2009)
+Weekly.2009=Weekly[!train,]
+dim(Weekly.2009)
+
+Direction.2009= Weekly$Direction[!train]
+```
+There are 104 observations in the test dataset from years 2009 and 2010. 
+
+# LOGISTIC REG
+```{r}
+glm.fit2 <- glm(Direction~ Lag1 + Lag2, 
+               data = Weekly, 
+               subset = train, 
+               family = binomial)
+
+
+glm.probs2 =predict(glm.fit2, Weekly.2009, type="response")
+
+glm.pred2 = rep("Down", 104)
+glm.pred2[glm.probs2>.5]="Up"
+table(glm.pred2, Direction.2009)
+mean(glm.pred2 == Direction.2009)
+mean(glm.pred2!=Direction.2009)
+
+#using confusion matrix code
+confusionMatrix(data = as.factor(glm.pred2),
+                reference = Weekly.2009$Direction,
+                positive = "Up")
+
+roc.glm2 <- roc(Weekly.2009$Direction, glm.probs2)
+plot(roc.glm2, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.glm2), col = 4, add = TRUE) 
+```
+The AUC value is 0.556.
+
+#LDA
+```{r}
+lda.fit = lda(Direction ~ Lag1 + Lag2, data = Weekly, subset = train)
+
+#Creates distributions (histograms) of Z for the two classes
+plot(lda.fit)
+
+lda.pred = predict(lda.fit, newdata = Weekly.2009)
+head(lda.pred$posterior)
+#posterior= predicted class probability
+
+roc.lda <- roc(Weekly.2009$Direction, lda.pred$posterior[,2], 
+               levels = c("Down", "Up"))
+
+plot(roc.lda, legacy.axes = TRUE, print.auc = TRUE)
+```
+The AUC value is 0.557
+
+# QDA
+```{r}
+qda.fit <- qda(Direction ~ Lag1 + Lag2, 
+               data = Weekly,
+               subset = train)
+
+qda.pred <- predict(qda.fit, newdata = Weekly.2009)
+head(qda.pred$posterior)
+
+roc.lda <- roc(Weekly.2009$Direction, qda.pred$posterior[,2], 
+               levels = c("Down", "Up"))
+
+plot(roc.lda, legacy.axes = TRUE, print.auc = TRUE)
+
+```
+The AUC value is 0.529. 
+
+```{r}
+
+ctrl <- trainControl(method = "repeatedcv",
+                     repeats = 5,
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+
+set.seed(1)
+model.knn <- train(Direction ~ Lag1 + Lag2, 
+                   data = Weekly, 
+                   method = "knn",
+                   preProcess = c("center","scale"),
+                   tuneGrid = data.frame(k = seq(1,200,by=5)),
+                   trControl = ctrl)
+
+ggplot(model.knn)
+
+``` 
+
+
+
+
+
+
