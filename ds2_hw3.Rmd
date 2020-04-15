@@ -21,7 +21,6 @@ library(ISLR)
 library(tidyverse)
 ```
 
-
 # PART A: Produce graphical summaries of the Weekly data
 ```{r}
 data("Weekly")
@@ -33,7 +32,7 @@ ggplot(Weekly, aes(x = Year, y = Volume, group = Year)) + geom_boxplot() + labs(
            x = "Year",
            y = "Volume")
 ```
-In the plot above, we can see that the total volume increases across years and was highest in 2009. 
+In the plot above, we can see that the total volume increases across years and the highest median volume was in 2009. 
 
 # DENSITY PLOTS FOR PREDICTORS
 ```{r}
@@ -62,7 +61,6 @@ contrasts(Weekly$Direction)
 
 summary(glm.fit)
 ```
-
 At alpha level of 0.05, only the variable "lag2" appears to be statistically significant in the logistic regression model (p-value = 0.0296). All other predictor variables have p-values greater than 0.05. 
 
 # PART C: Compute the confusion matrix and overall fraction of correct predictions. Breifly explain what the confusion matrix is telling you. 
@@ -152,7 +150,7 @@ roc.lda <- roc(Weekly.2009$Direction, lda.pred$posterior[,2],
 
 plot(roc.lda, legacy.axes = TRUE, print.auc = TRUE)
 ```
-The AUC value for the LDA model is 0.557
+Using the held out data, the AUC value for the LDA model is 0.557. 
 
 # PART F: QDA
 ```{r}
@@ -166,7 +164,7 @@ head(qda.pred$posterior)
 roc.qda <- roc(Weekly.2009$Direction, qda.pred$posterior[,2], 
                levels = c("Down", "Up"))
 
-plot(roc.lda, legacy.axes = TRUE, print.auc = TRUE)
+plot(roc.qda, legacy.axes = TRUE, print.auc = TRUE)
 
 ```
 The AUC value for the QDA model is 0.529. 
@@ -182,17 +180,43 @@ ctrl <- trainControl(method = "repeatedcv",
 set.seed(1)
 model.knn <- train(Direction ~ Lag1 + Lag2, 
                    data = Weekly, 
+                   subset = train, 
                    method = "knn",
                    preProcess = c("center","scale"),
                    tuneGrid = data.frame(k = seq(1,200,by=5)),
                    trControl = ctrl)
 
-#ROC using repreated cross-validation 
+
+#ROC using repreated cross-validation for Across Neighbors
 ggplot(model.knn, print.auc = TRUE)
+model.knn$bestTune
+#k = 6 = optimal tuning paramter 
+
+knnPredict <- predict(model.knn, newdata= Weekly.2009)
+confusionMatrix(knnPredict, Weekly.2009$Direction)
+
+#k=6
+knnPredict2 <- predict(model.knn, newdata= Weekly.2009, type = "prob", k =6)
+knn.roc <- roc(Weekly.2009$Direction, knnPredict2[,"Down"], levels = c("Down", "Up"))
+plot(knn.roc, legacy.axes = TRUE, print.auc = TRUE)
 ``` 
+The AUC value for the KNN model is 0.437. 
 
+# RESULTS 
+The following is a ranking of highest to lowest AUC values for the four models: LDA (0.557) > Logistic regressoin (0.556) > QDA (0.529) > KNN (0.437). The QDA and KNN models have lower AUC values. This is likley because they are more flexible models. Based on the AUC models, the LDA model would be the best. The ROC plots are plotted below for comparison. In the ROC plots, you can see that the LDA model typically has the highest values across values of 1-Specificity. 
 
+# Evaluating test performance - ROC curves
+```{r}
+auc <- c(roc.glm2$auc[1], roc.lda$auc[1],
+         roc.qda$auc[1], knn.roc$auc[1])
 
-
-
+plot(roc.glm2, legacy.axes = TRUE)
+plot(roc.glm, col = 2, add = TRUE)
+plot(roc.lda, col = 3, add = TRUE)
+plot(roc.qda, col = 4, add = TRUE)
+plot(knn.roc, col = 5, add = TRUE)
+modelNames <- c("glm model", "lda model","qda model", "knn model")
+legend("bottomright", legend = paste0(modelNames, ": ", round(auc,3)),
+       col = 1:6, lwd = 2)
+```
 
